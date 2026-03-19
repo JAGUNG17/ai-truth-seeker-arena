@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, gameSessions, players, rounds, claims, weeklyChallenges, leaderboards } from "../drizzle/schema";
 import { ENV } from './_core/env';
+
+export type { GameSession, Player, Round, Claim, WeeklyChallenge, Leaderboard } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -89,4 +91,200 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+/**
+ * Game Session Queries
+ */
+export async function createGameSession(roomCode: string, totalRounds: number = 5) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(gameSessions).values({
+    roomCode,
+    totalRounds,
+    status: 'waiting',
+  });
+  
+  return result;
+}
+
+export async function getGameSessionByRoomCode(roomCode: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select().from(gameSessions)
+    .where(eq(gameSessions.roomCode, roomCode))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateGameSessionStatus(sessionId: number, status: 'waiting' | 'active' | 'finished') {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(gameSessions)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(gameSessions.id, sessionId));
+}
+
+/**
+ * Player Queries
+ */
+export async function addPlayerToSession(userId: number, sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(players).values({
+    userId,
+    sessionId,
+    status: 'joined',
+  });
+  
+  return result;
+}
+
+export async function getSessionPlayers(sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select().from(players)
+    .where(eq(players.sessionId, sessionId));
+  
+  return result;
+}
+
+export async function updatePlayerScore(playerId: number, scoreIncrease: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(players)
+    .set({ totalScore: sql`${players.totalScore} + ${scoreIncrease}` })
+    .where(eq(players.id, playerId));
+}
+
+/**
+ * Round Queries
+ */
+export async function createRound(sessionId: number, roundNumber: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(rounds).values({
+    sessionId,
+    roundNumber,
+    status: 'active',
+  });
+  
+  return result;
+}
+
+export async function getCurrentRound(sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select().from(rounds)
+    .where(eq(rounds.sessionId, sessionId))
+    .orderBy(rounds.roundNumber)
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Claim Queries
+ */
+export async function submitClaim(playerId: number, roundId: number, statement: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(claims).values({
+    playerId,
+    roundId,
+    statement,
+  });
+  
+  return result;
+}
+
+export async function updateClaimValidation(claimId: number, score: number, explanation: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(claims)
+    .set({ 
+      validationScore: score, 
+      consensusExplanation: explanation,
+      validatedAt: new Date()
+    })
+    .where(eq(claims.id, claimId));
+}
+
+export async function getRoundClaims(roundId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select().from(claims)
+    .where(eq(claims.roundId, roundId));
+  
+  return result;
+}
+
+/**
+ * Weekly Challenge Queries
+ */
+export async function getCurrentWeeklyChallenge() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const now = new Date();
+  const result = await db.select().from(weeklyChallenges)
+    .where(sql`${weeklyChallenges.validFrom} <= ${now} AND ${now} <= ${weeklyChallenges.validUntil}`)
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createWeeklyChallenge(weekNumber: number, topic: string, category: string, description: string, validFrom: Date, validUntil: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(weeklyChallenges).values({
+    weekNumber,
+    topic,
+    category,
+    description,
+    validFrom,
+    validUntil,
+  });
+  
+  return result;
+}
+
+/**
+ * Leaderboard Queries
+ */
+export async function getSessionLeaderboard(sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.select().from(leaderboards)
+    .where(eq(leaderboards.sessionId, sessionId))
+    .orderBy(leaderboards.ranking);
+  
+  return result;
+}
+
+export async function createLeaderboardEntry(sessionId: number, playerId: number, ranking: number, score: number, xpEarned: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(leaderboards).values({
+    sessionId,
+    playerId,
+    ranking,
+    score,
+    xpEarned,
+  });
+  
+  return result;
+}
