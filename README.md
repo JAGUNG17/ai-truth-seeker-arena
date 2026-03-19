@@ -1,4 +1,4 @@
-# AI Truth-Seeker Arena
+# AI Truth-Seeker Arena🍗
 
 A multiplayer web-based mini-game that teaches **Intelligent Contracts** and **Optimistic Democracy** through engaging gameplay. Players submit claims and compete based on AI consensus validation, earning XP based on their final ranking.
 
